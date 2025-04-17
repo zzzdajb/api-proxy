@@ -414,33 +414,62 @@ app.all('/:service*', async (req, res) => {
     delete options.headers.host;
     delete options.headers.connection;
     
+    let hasError = false;
+    let isHeadersSent = false;
+
     // 创建代理请求
     const proxyReq = https.request(targetURL, options, (proxyRes) => {
-      // 设置响应头
-      Object.keys(proxyRes.headers).forEach(key => {
-        res.setHeader(key, proxyRes.headers[key]);
-      });
-      
-      res.status(proxyRes.statusCode);
-      
-      // 将响应数据传递给客户端
-      proxyRes.pipe(res);
-    });
-    
-    // 错误处理
-    proxyReq.on('error', (error) => {
-      console.error(`代理请求错误: ${error.message}`);
-      if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
-        res.status(504).send('Gateway Timeout: 请求超时');
-      } else {
-        res.status(500).send(`Internal Server Error: ${error.message}`);
+      if (hasError) return;
+
+      try {
+        // 设置响应头
+        if (!res.headersSent) {
+          Object.keys(proxyRes.headers).forEach(key => {
+            res.setHeader(key, proxyRes.headers[key]);
+          });
+          res.status(proxyRes.statusCode);
+          isHeadersSent = true;
+        }
+
+        // 处理403错误
+        if (proxyRes.statusCode === 403) {
+          console.error('收到403错误响应');
+          proxyRes.on('data', (chunk) => {
+            console.error(`403错误详情: ${chunk.toString()}`);
+          });
+        }
+
+        // 将响应数据传递给客户端
+        proxyRes.pipe(res).on('error', (error) => {
+          console.error(`响应流错误: ${error.message}`);
+        });
+      } catch (error) {
+        console.error(`处理响应时出错: ${error.message}`);
+        if (!res.headersSent) {
+          res.status(500).send(`Internal Server Error: ${error.message}`);
+        }
       }
     });
 
-    // 处理403错误
-    proxyRes.on('data', (chunk) => {
-      if (proxyRes.statusCode === 403) {
-        console.error(`收到403错误响应: ${chunk.toString()}`);
+    // 错误处理
+    proxyReq.on('error', (error) => {
+      hasError = true;
+      console.error(`代理请求错误: ${error.message}`);
+      if (!res.headersSent) {
+        if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+          res.status(504).send('Gateway Timeout: 请求超时');
+        } else {
+          res.status(500).send(`Internal Server Error: ${error.message}`);
+        }
+      }
+    });
+
+    // 设置请求超时
+    proxyReq.setTimeout(30000, () => {
+      hasError = true;
+      proxyReq.destroy();
+      if (!res.headersSent) {
+        res.status(504).send('Gateway Timeout: 请求超时');
       }
     });
     
