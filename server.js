@@ -434,18 +434,33 @@ app.all('/:service*', async (req, res) => {
         // 处理403错误
         if (proxyRes.statusCode === 403) {
           console.error('收到403错误响应');
-          let errorData = '';
+          let errorData = [];
           proxyRes.on('data', (chunk) => {
             try {
-              // 尝试将二进制数据转换为UTF-8字符串
-              errorData += chunk.toString('utf8');
+              // 检查响应头中的Content-Type
+              const contentType = proxyRes.headers['content-type'] || '';
+              
+              if (contentType.includes('application/json')) {
+                errorData.push(chunk.toString('utf8'));
+              } else if (contentType.includes('text/')) {
+                errorData.push(chunk.toString('utf8'));
+              } else {
+                // 对于非文本内容，使用Base64编码显示
+                errorData.push(chunk.toString('base64'));
+              }
             } catch (e) {
-              // 如果转换失败，使用十六进制显示
-              errorData += chunk.toString('hex');
+              console.error('处理错误响应数据时出错:', e);
+              errorData.push(chunk.toString('hex'));
             }
           });
           proxyRes.on('end', () => {
-            console.error(`403错误详情: ${errorData}`);
+            const fullError = errorData.join('');
+            console.error('403错误详情:', {
+              url: targetURL,
+              headers: proxyRes.headers,
+              statusCode: proxyRes.statusCode,
+              body: fullError
+            });
           });
         }
 
