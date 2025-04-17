@@ -404,9 +404,10 @@ app.all('/:service*', async (req, res) => {
       timeout: 30000 // 30秒超时
     };
     
-    // 如果是Grok服务，尝试添加User-Agent头
+    // 如果是Grok服务，添加API相关的请求头
     if (service === 'grok') {
-      options.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+      options.headers['Accept'] = 'application/json';
+      options.headers['Content-Type'] = 'application/json';
     }
     
     // 删除不需要的头信息
@@ -429,7 +430,18 @@ app.all('/:service*', async (req, res) => {
     // 错误处理
     proxyReq.on('error', (error) => {
       console.error(`代理请求错误: ${error.message}`);
-      res.status(500).send(`Error: ${error.message}`);
+      if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT') {
+        res.status(504).send('Gateway Timeout: 请求超时');
+      } else {
+        res.status(500).send(`Internal Server Error: ${error.message}`);
+      }
+    });
+
+    // 处理403错误
+    proxyRes.on('data', (chunk) => {
+      if (proxyRes.statusCode === 403) {
+        console.error(`收到403错误响应: ${chunk.toString()}`);
+      }
     });
     
     // 如果有请求体，将其传递给代理请求
