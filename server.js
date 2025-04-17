@@ -435,7 +435,15 @@ app.all('/:service*', async (req, res) => {
         if (proxyRes.statusCode === 403) {
           console.error('收到403错误响应');
           let errorData = [];
-          proxyRes.on('data', (chunk) => {
+          
+          // 处理gzip压缩响应
+          let responseStream = proxyRes;
+          if (proxyRes.headers['content-encoding'] === 'gzip') {
+            const zlib = require('zlib');
+            responseStream = proxyRes.pipe(zlib.createGunzip());
+          }
+          
+          responseStream.on('data', (chunk) => {
             try {
               // 检查响应头中的Content-Type
               const contentType = proxyRes.headers['content-type'] || '';
@@ -453,14 +461,15 @@ app.all('/:service*', async (req, res) => {
               errorData.push(chunk.toString('hex'));
             }
           });
-          proxyRes.on('end', () => {
+          
+          responseStream.on('end', () => {
             const fullError = errorData.join('');
-            console.error('403错误详情:', {
+            console.error('403错误详情:', JSON.stringify({
               url: targetURL,
               headers: proxyRes.headers,
               statusCode: proxyRes.statusCode,
               body: fullError
-            });
+            }, null, 2));
           });
         }
 
