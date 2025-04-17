@@ -434,8 +434,18 @@ app.all('/:service*', async (req, res) => {
         // 处理403错误
         if (proxyRes.statusCode === 403) {
           console.error('收到403错误响应');
+          let errorData = '';
           proxyRes.on('data', (chunk) => {
-            console.error(`403错误详情: ${chunk.toString()}`);
+            try {
+              // 尝试将二进制数据转换为UTF-8字符串
+              errorData += chunk.toString('utf8');
+            } catch (e) {
+              // 如果转换失败，使用十六进制显示
+              errorData += chunk.toString('hex');
+            }
+          });
+          proxyRes.on('end', () => {
+            console.error(`403错误详情: ${errorData}`);
           });
         }
 
