@@ -404,6 +404,11 @@ app.all('/:service*', async (req, res) => {
       timeout: 30000 // 30秒超时
     };
     
+    // 如果是Grok服务，尝试添加User-Agent头
+    if (service === 'grok') {
+      options.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+    }
+    
     // 删除不需要的头信息
     delete options.headers.host;
     delete options.headers.connection;
